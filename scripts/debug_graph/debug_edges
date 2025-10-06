@@ -1,0 +1,12 @@
+import pickle
+
+with open("data/processed/pt_graph.gpickle", "rb") as f:
+    G = pickle.load(f)
+
+print("FSS → RMD exists:", G.has_edge("vic:rail:FSS", "vic:rail:RMD"))
+print("RMD → FSS exists:", G.has_edge("vic:rail:RMD", "vic:rail:FSS"))
+
+if G.has_edge("vic:rail:FSS", "vic:rail:RMD"):
+    print("Edge data:", G["vic:rail:FSS"]["vic:rail:RMD"])
+if G.has_edge("vic:rail:RMD", "vic:rail:FSS"):
+    print("Edge data:", G["vic:rail:RMD"]["vic:rail:FSS"])

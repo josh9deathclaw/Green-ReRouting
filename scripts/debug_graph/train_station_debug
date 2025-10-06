@@ -1,0 +1,92 @@
+import pandas as pd
+import networkx as nx
+import pickle
+
+# Load data
+edges = pd.read_csv('data/processed/edges_merged.csv')
+stops = pd.read_csv('data/processed/stops_cleaned.csv')
+
+print("=== TRAIN NETWORK ANALYSIS ===\n")
+
+# Get train edges only
+train_edges = edges[edges['mode'] == 'train']
+print(f"Total train edges: {len(train_edges)}")
+print(f"Unique routes: {train_edges['route_id'].nunique()}")
+print()
+
+# Find city stations
+city_stations = ['Southern Cross', 'Flinders Street', 'Melbourne Central', 
+                 'Flagstaff', 'Parliament', 'Richmond']
+
+print("City Station IDs:")
+for name in city_stations:
+    matches = stops[stops['stop_name'].str.contains(name, case=False, na=False)]
+    if len(matches) > 0:
+        station_id = matches.iloc[0]['station_id']
+        print(f"  {name}: {station_id}")
+        
+        # Check edges involving this station
+        from_edges = train_edges[train_edges['from_station'] == station_id]
+        to_edges = train_edges[train_edges['to_station'] == station_id]
+        
+        print(f"    Outgoing train edges: {len(from_edges)}")
+        print(f"    Incoming train edges: {len(to_edges)}")
+        
+        if len(from_edges) > 0:
+            print(f"    Sample destinations: {from_edges['to_station'].head(3).tolist()}")
+        if len(to_edges) > 0:
+            print(f"    Sample origins: {to_edges['from_station'].head(3).tolist()}")
+    else:
+        print(f"  {name}: NOT FOUND")
+    print()
+
+# Check which routes connect to city
+print("\nTrain Routes and Their Stations:")
+for route_id in train_edges['route_id'].unique()[:10]:
+    route_edges = train_edges[train_edges['route_id'] == route_id]
+    stations = set(route_edges['from_station'].tolist() + route_edges['to_station'].tolist())
+    
+    # Check if any city stations in this route
+    city_in_route = []
+    for name in city_stations:
+        matches = stops[stops['stop_name'].str.contains(name, case=False, na=False)]
+        if len(matches) > 0 and matches.iloc[0]['station_id'] in stations:
+            city_in_route.append(name)
+    
+    print(f"\nRoute: {route_id}")
+    print(f"  Edges: {len(route_edges)}")
+    print(f"  Stations: {len(stations)}")
+    print(f"  City stations: {city_in_route if city_in_route else 'NONE'}")
+    print(f"  Sample stations: {list(stations)[:5]}")
+
+# Load graph and check connectivity
+print("\n\n=== GRAPH CONNECTIVITY ===\n")
+with open('data/processed/pt_graph.gpickle', 'rb') as f:
+    G = pickle.load(f)
+
+# Find city station nodes
+city_nodes = {}
+for name in city_stations:
+    matches = [n for n, d in G.nodes(data=True) 
+              if name.lower() in d.get('stop_name', '').lower()]
+    if matches:
+        city_nodes[name] = matches[0]
+
+print("City stations in graph:")
+for name, node_id in city_nodes.items():
+    degree = G.degree(node_id)
+    in_degree = G.in_degree(node_id)
+    out_degree = G.out_degree(node_id)
+    print(f"  {name} ({node_id}):")
+    print(f"    Total connections: {degree}")
+    print(f"    Incoming: {in_degree}, Outgoing: {out_degree}")
+
+# Check if city stations are connected to each other
+print("\nConnectivity between city stations:")
+for i, (name1, node1) in enumerate(city_nodes.items()):
+    for name2, node2 in list(city_nodes.items())[i+1:]:
+        try:
+            path = nx.shortest_path(G, node1, node2)
+            print(f"  ✓ {name1} → {name2}: {len(path)} stops")
+        except:
+            print(f"  ✗ {name1} → {name2}: NO PATH")
